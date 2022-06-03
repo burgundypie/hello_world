@@ -1,0 +1,108 @@
+
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+  
+env:
+  global_env: global
+  artifact_name: app-ver_${{ github.sha }}
+
+jobs:
+  sys_info:
+    runs-on: ubuntu-20.04
+    
+    env:
+      local_env: job
+      
+    steps:
+      - name: check tools
+        run: g++ -v
+          
+          
+  build_ubuntu_macOS:
+    needs: [sys_info]
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-20.04, macos-11 ]
+        gcc_o: ["-O0"]
+
+    env:
+      app_name: app-${{ matrix.os }}${{ matrix.gcc_o }}_ver.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: build
+        run: |
+          g++ ${{ matrix.gcc_o }} hello.cpp -o ${{ env.app_name }}
+          ls -la
+          ./${{ env.app_name }}
+          
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v3.0.0
+        with:
+          name: ${{ env.artifact_name }}
+          path: ${{ env.app_name }}
+          retention-days: 1
+          
+  
+  build_win:
+    needs: [sys_info]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: build
+        run: cl /EHsc hello.cpp
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v3.0.0
+        with:
+          name: app-windows
+          path: hello.exe
+          retention-days: 1
+  
+  
+  report:
+    if: failure() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-20.04
+    needs: [build_win, build_ubuntu_macOS]
+    steps:
+      - name: print secrets
+        run: echo ${{ secrets.TELEGRAM_TO }}
+      - name: send telegram message on push
+        uses: appleboy/telegram-action@master
+        with: 
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            ${{ github.actor }} created commit
+            Commit message: ${{ github.event.commits[0].message }}
+            
+            Repository: ${{ github.repository }}
+            
+            See changes: https://github.com/${{ github.repository }}/commit/${{github.sha}}
+      
+  export:
+    runs-on: ubuntu-20.04
+    needs: [build_win, build_ubuntu_macOS]
+    steps:
+      - name: Download a Build Artifact
+        uses: actions/download-artifact@v2.1.0
+        with:
+          name: ${{ env.artifact_name }}
+
+      - name: send telegram message on push
+        uses: appleboy/telegram-action@master
+        with: 
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          document: app-**
+          message: |
+            ${{ github.actor }} created commit
+            See changes: https://github.com/${{ github.repository }}/commit/${{github.sha}}
