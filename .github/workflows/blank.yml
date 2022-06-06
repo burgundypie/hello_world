@@ -1,0 +1,36 @@
+
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+  
+env:
+  global_env: global
+  artifact_name: app-ver_${{ github.sha }}
+
+jobs:
+  sys_info:
+    runs-on: ubuntu-20.04
+    
+    env:
+      local_env: job
+      
+    steps:
+      - name: check tools
+        run: g++ -v
+          
+          
+  build_ubuntu_macOS:
+    needs: [sys_info]
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-20.04, macos-11 ]
+        gcc_o: ["-O0"]
+
